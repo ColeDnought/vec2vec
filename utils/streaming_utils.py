@@ -76,6 +76,8 @@ def load_streaming_embeddings(
         dset = load_dataset("BeIR/msmarco", "corpus", streaming=streaming, num_proc=8)["corpus"]
     elif dataset_name == "msmarco-queries":
         dset = load_dataset("BeIR/msmarco", "queries", streaming=streaming, num_proc=8)["queries"]
+    elif dataset_name == "trec-news":
+        dset = load_dataset("BeIR/trec-news-generated-queries", streaming=streaming, num_proc=8, split="train").remove_columns(['_id', 'title', 'query'])
     elif dataset_name == "retrieval":
         dset = _load_retrieval_dataset()
     else:
