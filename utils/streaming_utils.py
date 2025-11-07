@@ -2,10 +2,9 @@ import os
 
 import datasets
 import torch
-import vec2text
 
 from datasets import Features, Value, load_dataset
-from beir.datasets.data_loader_hf import HFDataLoader
+from utils.beir_dl import HFDataLoader
 
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -85,6 +84,14 @@ def load_streaming_embeddings(
     return dset.with_format("torch")
 
 
+def vec2text_mean_pool(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    B, S, D = hidden_states.shape
+    unmasked_outputs = hidden_states * attention_mask[..., None]
+    pooled_outputs = unmasked_outputs.sum(dim=1) / attention_mask.sum(dim=1)[:, None]
+    assert pooled_outputs.shape == (B, D)
+    return pooled_outputs
+
+
 def get_embeddings(text_list,
                    encoder,
                    tokenizer,
@@ -100,7 +107,7 @@ def get_embeddings(text_list,
     with torch.no_grad():
         model_output = encoder(**inputs)
         hidden_state = model_output.last_hidden_state
-        embeddings = vec2text.models.model_utils.mean_pool(hidden_state, inputs['attention_mask'])
+        embeddings = vec2text_mean_pool(hidden_state, inputs['attention_mask'])
 
     return embeddings
 

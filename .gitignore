@@ -23,3 +23,5 @@ old*
 data/
 viz/
 latex/
+vec2text/
+.vscode/

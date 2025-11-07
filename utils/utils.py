@@ -1,5 +1,6 @@
 import multiprocessing
-import os, json
+import os
+import json
 from types import SimpleNamespace
 
 import torch

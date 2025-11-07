@@ -315,6 +315,11 @@ def main():
         elif hasattr(cfg, 'unsup_points'):
             unsupset = dset.select(range(min(cfg.unsup_points, len(dset))))
             supset = dset.select(range(min(cfg.unsup_points, len(dset)), len(dset) - len(unsupset)))
+        
+        # Set format to "python" to avoid NumPy 2.0 compatibility issues with datasets library
+        supset.set_format("python")
+        unsupset.set_format("python")
+        valset.set_format("python")
     else:
         supset = load_from_disk('data/mimic')['supervised'].shuffle(cfg.train_dataset_seed).select(range(cfg.num_points))
         unsupset = load_from_disk('data/mimic')['unsupervised'].shuffle(cfg.train_dataset_seed).select(range(cfg.num_points))
@@ -324,6 +329,11 @@ def main():
         supset = supset.remove_columns([col for col in supset.column_names if col != 'text'])
         unsupset = unsupset.remove_columns([col for col in unsupset.column_names if col != 'text'])
         valset = valset.remove_columns([col for col in valset.column_names if col != 'text'])
+        
+        # Set format to "python" to avoid NumPy 2.0 compatibility issues with datasets library
+        supset.set_format("python")
+        unsupset.set_format("python")
+        valset.set_format("python")
         
 
     supset = MultiencoderTokenizedDataset(

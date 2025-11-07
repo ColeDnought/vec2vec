@@ -1,0 +1,15 @@
+--extra-index-url https://download.pytorch.org/whl/cu129
+torch >= 2.1
+sentence-transformers==5.1.2
+datasets==2.19.1
+transformers>=4.57.1
+diffusers>=2.19.1
+accelerate==1.11.0
+evaluate==0.4.6
+matplotlib
+seaborn
+wandb
+pandas==2.3.3
+toml
+nltk==3.9.2
+tenacity
