@@ -35,15 +35,15 @@ def load_encoder(model_flag, device: str = 'cpu', mixed_precision: Optional[str]
     model_kwargs = {}
     if mixed_precision is not None:
         if mixed_precision == 'bf16':
-            model_kwargs['torch_dtype'] = torch.bfloat16
+            model_kwargs['dtype'] = torch.bfloat16
         elif mixed_precision == 'fp16':
-            model_kwargs['torch_dtype'] = torch.float16
+            model_kwargs['dtype'] = torch.float16
         elif mixed_precision == 'no':
-            model_kwargs['torch_dtype'] = torch.float32
+            model_kwargs['dtype'] = torch.float32
         else:
             raise ValueError(f"Unknown mixed precision flag {mixed_precision}")
     else:
-        model_kwargs['torch_dtype'] = torch.float32
+        model_kwargs['dtype'] = torch.float32
     
 
     # special loading for gpt-2

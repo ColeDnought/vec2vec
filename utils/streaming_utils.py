@@ -37,7 +37,7 @@ def load_streaming_embeddings(
         dataset_name: str,
         split_flag: str = "train",
         streaming: bool = False,
-    ):
+    ) -> datasets.Dataset:
     if dataset_name == 'nq':
         dset = load_dataset("jxm/nq_corpus_dpr", split=split_flag, streaming=streaming)
     elif dataset_name == 'fineweb':
