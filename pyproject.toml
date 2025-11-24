@@ -1,0 +1,23 @@
+[project]
+name = "vec2vec"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate==1.11.0",
+    "datasets==2.19.1",
+    "diffusers>=0.35.2",
+    "evaluate==0.4.6",
+    "matplotlib>=3.10.7",
+    "nltk==3.9.2",
+    "pandas>=2.3.3",
+    "seaborn>=0.13.2",
+    "sentence-transformers==5.1.2",
+    "tenacity>=9.1.2",
+    "toml>=0.10.2",
+    "torch>=2.1",
+    "transformers>=4.57.1",
+    "vec2text>=0.0.13",
+    "wandb>=0.23.0",
+]
