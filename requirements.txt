@@ -1,6 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cu129
 vec2text
-torch >= 2.1
+torch>=2.1
 sentence-transformers==5.1.2
 datasets==2.19.1
 transformers>=4.57.1
@@ -14,3 +14,6 @@ pandas
 toml
 nltk==3.9.2
 tenacity
+umap-learn
+ipykernel
+ipywidgets
