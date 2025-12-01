@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from scipy.linalg import svd
-from scipy.stats import pearsonr
 
 
 def center_and_normalize(X):
