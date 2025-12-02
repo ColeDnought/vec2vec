@@ -1,0 +1,5 @@
+ds1 = 'nq'
+model1 = 'stella'
+model2 = 'e5'
+num_train = 25000
+num_test = 5000

@@ -142,11 +142,11 @@ def forward_embedding_sentence_transformers(enc, features, normalize_embeddings:
 
 
 def process_batch(batch, encoders, normalize_embeddings, device='cpu'):
-    ins = {}
+    ins = {}    
     batch_embs = [k.replace("_input_ids", "") for k in batch.keys() if k.endswith("_input_ids")]
     for emb in batch_embs:
         encoders[emb].to(device)
-        emb_inputs = { k.replace(f"{emb}_", ""): v for k, v in batch.items() if k.startswith(f"{emb}_") }
+        emb_inputs = { k.replace(f"{emb}_", ""): v.to(device) for k, v in batch.items() if k.startswith(f"{emb}_") }
         ins[emb] = forward_embedding_sentence_transformers(
             encoders[emb], emb_inputs,
             normalize_embeddings=normalize_embeddings

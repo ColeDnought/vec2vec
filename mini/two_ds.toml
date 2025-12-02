@@ -2,6 +2,6 @@ ds1 = 'nq'
 ds2 = 'trec-covid-corpus'
 model1 = 'stella'
 model2 = 'e5'
-num_train = 50000
+num_train = 25000
 num_test = 5000
 ratio=0.5
