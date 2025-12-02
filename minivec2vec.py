@@ -8,7 +8,7 @@ from scipy.optimize import quadratic_assignment
 from sklearn.cluster import KMeans
 import torch.nn.functional as F
 from warnings import filterwarnings
-from mini.topology import compute_cca, compute_svcca, compute_pwcca
+from mini.topology import compute_cca, compute_svcca, compute_pwcca, compute_wasserstein_distance
 
 filterwarnings("ignore", category=FutureWarning)
 
@@ -141,6 +141,9 @@ def report(X_eval, Y_eval, W, top_n) -> dict:
     
     pwcca = compute_pwcca(X_transformed, Y_eval)
 
+    # Persistence-based topology (2-Wasserstein distance between persistence diagrams)
+    wasserstein_dist = compute_wasserstein_distance(X_transformed, Y_eval, dim=1, n_samples=500)
+
     print("Top-1 Accuracy:", acc)
     print("Average Rank:", avg_rank)
     print(f"Average cos sim @ top {top_n}:", cossim)
@@ -148,6 +151,8 @@ def report(X_eval, Y_eval, W, top_n) -> dict:
     print("Mean CCA:", mean_cca)
     print("Mean SVCCA:", mean_svcca)
     print("PWCCA:", pwcca)
+    if wasserstein_dist is not None:
+        print("Wasserstein Distance (H1):", wasserstein_dist)
 
     return {
         'accuracy': acc,
@@ -157,6 +162,7 @@ def report(X_eval, Y_eval, W, top_n) -> dict:
         'mean_cca': mean_cca,
         'mean_svcca': mean_svcca,
         'pwcca': pwcca,
+        'wasserstein_h1': wasserstein_dist,
     }
 
 def top_cosine_similarity(X: torch.Tensor, Y: torch.Tensor, k=1) -> float:
@@ -309,14 +315,21 @@ def aligned_centroids(X_train, Y_train, n_runs=300, n_clusters=50, method='2opt'
 
     quad = None
     # need to re-run the QAP a few times because it's not very good at finding the global optimum (even 2opt)
-    for i in trange(n_runs, leave=False, disable=not verbose):
+    for i in range(n_runs):
         new_quad = quadratic_assignment(kernel1, kernel2, method=method, options={'maximize': True})
         if quad is None or quad.fun < new_quad.fun:
             quad = new_quad
     centers2 = centers2[quad.col_ind] # type: ignore
     return tensor(centers1), tensor(centers2)
 
-def anchor(X_train, Y_train, k: int = 50, anchor_steps: int = 30, subsample: int = 10_000, n_clusters: int = 20, n_runs: int = 30, batch_size: int = 256):
+def anchor(X_train, Y_train, 
+           k: int = 50, 
+           anchor_steps: int = 30, 
+           subsample: int = 10_000, 
+           n_clusters: int = 20, 
+           n_runs: int = 30, 
+           batch_size: int = 256
+        ) -> torch.Tensor:
     all_centers1, all_centers2 = [], []
     for _ in trange(anchor_steps, desc='Finding anchor clusters'):
         centers1, centers2 = aligned_centroids(X_train, Y_train, subsample=subsample, n_clusters=n_clusters, n_runs=n_runs, method='2opt')
@@ -431,7 +444,7 @@ def run_experiment(
     csv_path = 'distro_mixin.csv'
     fieldnames = ['ds1', 'ds2', 'model1', 'model2', 'num_train', 'num_test', 'ratio', 
                   'accuracy', 'avg_rank', 'cosine_similarity', 'matched_cosine_similarity',
-                  'mean_cca', 'mean_svcca', 'pwcca']
+                  'mean_cca', 'mean_svcca', 'pwcca', 'wasserstein_h1']
     
     # Check if file exists to determine if we need to write header
     file_exists = os.path.exists(csv_path)

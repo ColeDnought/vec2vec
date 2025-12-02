@@ -15,5 +15,7 @@ toml
 nltk==3.9.2
 tenacity
 umap-learn
+ripser
+persim
 ipykernel
 ipywidgets

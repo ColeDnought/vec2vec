@@ -4,6 +4,8 @@
     - Just for mean pooling function, added implementation directly
 - Added Beir HFDataLoader implementation directly
 
+- High-entropy evals below 12k samples
+
 Try two-sampled distribution (nq and tweettopic)
 50-100k points, >10 eps (prob 50)
 Vector space preservation (see neurips version)
