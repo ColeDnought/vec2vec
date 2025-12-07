@@ -414,7 +414,7 @@ def run_experiment(
         ratio: float = 0.5
     ) -> torch.Tensor:
     # Load first dataset
-    ds1_model1, ds1_model2 = torch.load(f'embeddings/{ds1}/{model1}.pt'), torch.load(f'embeddings/{ds1}/{model2}.pt')
+    ds1_model1, ds1_model2 = np.load(f'embeddings/{ds1}/{model1}.npy'), np.load(f'embeddings/{ds1}/{model2}.npy')
     
     # Check if single dataset mode (ds2 is None or same as ds1)
     if ds2 is None or ds2 == ds1:
@@ -427,7 +427,7 @@ def run_experiment(
         ds2 = ds1  # For CSV logging
     else:
         # Two dataset mode
-        ds2_model1, ds2_model2 = torch.load(f'embeddings/{ds2}/{model1}.pt'), torch.load(f'embeddings/{ds2}/{model2}.pt')
+        ds2_model1, ds2_model2 = np.load(f'embeddings/{ds2}/{model1}.npy'), np.load(f'embeddings/{ds2}/{model2}.npy')
         X_train, Y_train, X_eval, Y_eval = train_test_split(
             ds1_model1, ds1_model2,
             ds2_model1, ds2_model2,
@@ -471,7 +471,7 @@ if __name__ == '__main__':
     import sys
     import toml
 
-    toml_file = sys.argv[1] if len(sys.argv) > 1 else 'mini/linear_config.toml'
+    toml_file = sys.argv[1] if len(sys.argv) > 1 else 'mini/linear.toml'
     config = toml.load(toml_file)
 
     run_experiment(**config)
