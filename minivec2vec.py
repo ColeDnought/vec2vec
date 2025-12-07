@@ -406,8 +406,8 @@ def train(X_train, Y_train) -> torch.Tensor:
 
 def run_experiment(
         ds1: str = 'nq', 
-        ds2: str | None = 'trec-covid-corpus', 
-        model1: str = 'stella', 
+        ds2: str | None = None, 
+        model1: str = 'gte', 
         model2: str = 'e5', 
         num_train: int = 28_000, 
         num_test: int = 5_000, 
@@ -415,6 +415,7 @@ def run_experiment(
     ) -> torch.Tensor:
     # Load first dataset
     ds1_model1, ds1_model2 = np.load(f'embeddings/{ds1}/{model1}.npy'), np.load(f'embeddings/{ds1}/{model2}.npy')
+    ds1_model1, ds1_model2 = tensor(ds1_model1), tensor(ds1_model2)
     
     # Check if single dataset mode (ds2 is None or same as ds1)
     if ds2 is None or ds2 == ds1:
@@ -428,6 +429,7 @@ def run_experiment(
     else:
         # Two dataset mode
         ds2_model1, ds2_model2 = np.load(f'embeddings/{ds2}/{model1}.npy'), np.load(f'embeddings/{ds2}/{model2}.npy')
+        ds2_model1, ds2_model2 = tensor(ds2_model1), tensor(ds2_model2)
         X_train, Y_train, X_eval, Y_eval = train_test_split(
             ds1_model1, ds1_model2,
             ds2_model1, ds2_model2,
