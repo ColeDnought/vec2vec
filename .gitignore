@@ -25,3 +25,5 @@ latex/
 vec2text/
 .vscode/
 papers/
+embeddings/
+embeddings_old/

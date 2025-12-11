@@ -310,7 +310,7 @@ def classification_batch(ins, translations, labels, gt_mapping, k=1):
         # Compute top-k accuracy and average rank in one pass.
         acc, avg_rank = compute_topk_accuracy_and_avg_rank(sorted_indices, gt_mapping, k)
         res[f'{target_model}_top_{k}_acc'] = acc
-        res[f'{target_model}_avg_rank'] = avg_rank
+        res[f'{target_model}_avg_rank'] = avg_ran
         
         p, r = top_k_p_r(topk_preds.cpu().numpy(), gt_mapping.cpu().numpy(), k)
         res[f'{target_model}_P@{k}'] = p
