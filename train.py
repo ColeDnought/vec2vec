@@ -23,6 +23,7 @@ from utils.utils import *
 from utils.streaming_utils import load_streaming_embeddings, process_batch
 from utils.train_utils import rec_loss_fn, trans_loss_fn, vsp_loss_fn, get_grad_norm
 from utils.wandb_logger import Logger
+from mini.topology import compute_cca, compute_svcca, compute_pwcca, compute_wasserstein_distance
 
 from datasets import load_from_disk
 
@@ -44,6 +45,20 @@ def training_loop_(
     dataloader_pbar = tqdm(dataloader_pbar, total=len(unsup_dataloader), desc="Training")
 
     model_save_dir = os.path.join(save_dir, 'model.pt')
+
+    # Load linear weights if available
+    linear_weights = {}
+    # Check for sup -> unsup
+    path_sup_to_unsup = os.path.join('weights', cfg.dataset, f"{cfg.sup_emb}_to_{cfg.unsup_emb}.pt")
+    if os.path.exists(path_sup_to_unsup):
+        print(f"Loading linear weights from {path_sup_to_unsup} for {cfg.sup_emb}")
+        linear_weights[cfg.sup_emb] = torch.load(path_sup_to_unsup).to(device)
+        
+    # Check for unsup -> sup
+    path_unsup_to_sup = os.path.join('weights', cfg.dataset, f"{cfg.unsup_emb}_to_{cfg.sup_emb}.pt")
+    if os.path.exists(path_unsup_to_sup):
+        print(f"Loading linear weights from {path_unsup_to_sup} for {cfg.unsup_emb}")
+        linear_weights[cfg.unsup_emb] = torch.load(path_unsup_to_sup).to(device)
 
     translator.train()
     for i, batches in enumerate(dataloader_pbar):
@@ -67,6 +82,11 @@ def training_loop_(
                 **process_batch(sup_batch, sup_encs, cfg.normalize_embeddings, device), 
                 **process_batch(unsup_batch, unsup_enc, cfg.normalize_embeddings, device)
             }
+
+            # Apply linear weights
+            for emb_name, weight in linear_weights.items():
+                if emb_name in ins:
+                    ins[emb_name] = torch.nn.functional.linear(ins[emb_name], weight)
 
             recons, translations, reps = translator(
                 ins, noise_level=cfg.noise_level, include_reps=True
@@ -555,6 +575,50 @@ def main():
                             val_res[f"val/{k}"] = v
                         else:
                             val_res[f"val/{k} (avg. {cfg.top_k_batches} batches)"] = v
+                
+                # Compute topological metrics on translated embeddings
+                try:
+                    # Get a batch of embeddings for topological analysis
+                    topo_batch = next(iter(valloader))
+                    topo_ins = process_batch(topo_batch, {**sup_encs, **unsup_enc}, cfg.normalize_embeddings, accelerator.device)
+                    _, topo_trans = translator(topo_ins, include_reps=False)
+                    
+                    # Compute metrics for sup -> unsup translation
+                    X_trans = topo_trans[cfg.unsup_emb][cfg.sup_emb].cpu()
+                    Y_target = topo_ins[cfg.unsup_emb].cpu()
+                    
+                    cca_corrs = compute_cca(X_trans, Y_target)
+                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_mean_cca"] = float(np.mean(cca_corrs))
+                    
+                    svcca_corrs = compute_svcca(X_trans, Y_target)
+                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_mean_svcca"] = float(np.mean(svcca_corrs))
+                    
+                    pwcca = compute_pwcca(X_trans, Y_target)
+                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_pwcca"] = pwcca
+                    
+                    wasserstein_dist = compute_wasserstein_distance(X_trans, Y_target, dim=1, n_samples=1000)
+                    if wasserstein_dist is not None:
+                        val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_wasserstein_h1"] = wasserstein_dist
+                    
+                    # Compute metrics for unsup -> sup translation
+                    X_trans_rev = topo_trans[cfg.sup_emb][cfg.unsup_emb].cpu()
+                    Y_target_rev = topo_ins[cfg.sup_emb].cpu()
+                    
+                    cca_corrs_rev = compute_cca(X_trans_rev, Y_target_rev)
+                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_mean_cca"] = float(np.mean(cca_corrs_rev))
+                    
+                    svcca_corrs_rev = compute_svcca(X_trans_rev, Y_target_rev)
+                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_mean_svcca"] = float(np.mean(svcca_corrs_rev))
+                    
+                    pwcca_rev = compute_pwcca(X_trans_rev, Y_target_rev)
+                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_pwcca"] = pwcca_rev
+                    
+                    wasserstein_dist_rev = compute_wasserstein_distance(X_trans_rev, Y_target_rev, dim=1, n_samples=1000)
+                    if wasserstein_dist_rev is not None:
+                        val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_wasserstein_h1"] = wasserstein_dist_rev
+                except Exception as e:
+                    print(f"Warning: Could not compute topological metrics: {e}")
+                
                 wandb.log(val_res)
                 translator.train()
 

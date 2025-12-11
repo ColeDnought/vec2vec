@@ -17,5 +17,6 @@ tenacity
 umap-learn
 ripser
 persim
+fastkmeans
 ipykernel
 ipywidgets

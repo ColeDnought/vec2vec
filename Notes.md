@@ -10,3 +10,7 @@ Try two-sampled distribution (nq and tweettopic)
 50-100k points, >10 eps (prob 50)
 Vector space preservation (see neurips version)
 Focus on rank & top-1, then cossim
+
+For different dim sizes (gtr -> gte, etc.):
+- Apply linear mapping to latent dim in GAN?
+- Least squares for dim reduction vs learned mapping?
