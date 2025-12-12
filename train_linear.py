@@ -2,6 +2,7 @@ import numpy as np
 from tqdm.auto import trange
 from scipy.linalg import orthogonal_procrustes
 from scipy.optimize import quadratic_assignment
+from scipy.stats import skew
 from sklearn.cluster import KMeans
 
 import torch
@@ -103,6 +104,14 @@ def log_metrics(step_name, X_transf, Y_eval, ground_truth):
     # Cosine similarity
     cos_sim = torch.cosine_similarity(X_transf_dev, Y_eval_dev, dim=-1).mean().item()
 
+    # Hubness
+    knn_indices = sorted_indices[:, 0]
+    knn_indices_flat = knn_indices.reshape(-1)
+    occurrence_counts = torch.bincount(knn_indices_flat, minlength=len(Y_eval)).float()
+    occurrence_counts_np = occurrence_counts.cpu().numpy()
+    hubness_skew = skew(occurrence_counts_np)
+    share_orphans = (occurrence_counts == 0).float().mean().item()
+
     wandb.log({
         "step_name": step_name,
         "acc_top1": acc,
@@ -110,14 +119,16 @@ def log_metrics(step_name, X_transf, Y_eval, ground_truth):
         "cosine_similarity": cos_sim,
         "wasserstein_mean": wasser_mean,
         "wasserstein_std": wasser_std,
+        "hubness_skew": hubness_skew,
+        "orphans": share_orphans,
     })
-    print(f"[{step_name}] Acc@1: {acc:.4f}, Rank: {avg_rank:.2f}, CosSim: {cos_sim:.4f}, WD: {wasser_mean:.4f}")
+    print(f"[{step_name}] Acc@1: {acc:.4f}, Rank: {avg_rank:.2f}, CosSim: {cos_sim:.4f}, WD: {wasser_mean:.4f}, HubSkew: {hubness_skew:.4f}, Orphans: {share_orphans:.4f}")
 
 
-def main(ds, model1, model2, num_train, num_test, k=50, num_procrustes_iters=100, num_cluster_iters=2, num_clusters=500, seed=42):
+def main(ds, model1, model2, num_train, num_test, run_name, ds2=None, source_1_ratio = 0.5, k=50, num_procrustes_iters=100, num_cluster_iters=2, num_clusters=500, seed=42):
     run = wandb.init(
-        project="vec2vec-linear",
-        name=f"seed-{seed}",
+        project="unsupervised_disc",
+        name=run_name,
         config={
             "ds": ds,
             "model1": model1,
@@ -133,11 +144,25 @@ def main(ds, model1, model2, num_train, num_test, k=50, num_procrustes_iters=100
     ds1_model1, ds1_model2 = np.load(f'embeddings/{ds}/{model1}.npy'), np.load(f'embeddings/{ds}/{model2}.npy')
     ds1_model1, ds1_model2 = tensor(ds1_model1), tensor(ds1_model2)
 
-    X_train, Y_train, X_eval, Y_eval = train_test_split(
-        ds1_model1, ds1_model2,
-        num_train_samples=num_train,
-        num_test_samples=num_test
-    )
+    if ds2 is not None:
+        ds2_model1, ds2_model2 = np.load(f'embeddings/{ds2}/{model1}.npy'), np.load(f'embeddings/{ds2}/{model2}.npy')
+        ds2_model1, ds2_model2 = tensor(ds2_model1), tensor(ds2_model2)
+        ds1_model1 = torch.cat([ds1_model1, ds2_model1], dim=0)
+        ds1_model2 = torch.cat([ds1_model2, ds2_model2], dim=0)
+    
+        X_train, Y_train, X_eval, Y_eval = train_test_split(
+            ds1_model1, ds1_model2,
+            ds2_model1, ds2_model2,
+            num_train_samples=num_train,
+            num_test_samples=num_test,
+            source1_ratio=source_1_ratio
+        )
+    else:
+        X_train, Y_train, X_eval, Y_eval = train_test_split(
+            ds1_model1, ds1_model2,
+            num_train_samples=num_train,
+            num_test_samples=num_test
+        )
 
     ground_truth = torch.eye(len(X_eval))
 
@@ -200,8 +225,9 @@ def main(ds, model1, model2, num_train, num_test, k=50, num_procrustes_iters=100
     return W, X_eval, Y_eval
 
 if __name__ == "__main__":
-    for seed in [3, 42, 100, 3333, 7]:
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        main(ds='nq', model1='gte', model2='gtr', num_train=128_000, num_test=16_000, 
-             num_procrustes_iters=200, num_cluster_iters=5, num_clusters=1024, seed=seed)
+    seed = 42
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    run_name = "distro_split_80-20"
+    main(ds='nq', ds2='fineweb', model1='gte', model2='e5', num_train=128_000, num_test=16_000, run_name=run_name,
+            num_procrustes_iters=200, num_cluster_iters=5, num_clusters=1024, seed=seed)

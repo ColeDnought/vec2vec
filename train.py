@@ -20,7 +20,7 @@ from utils.eval_utils import EarlyStopper, eval_loop_
 from utils.gan import LeastSquaresGAN, RelativisticGAN, VanillaGAN
 from utils.model_utils import get_sentence_embedding_dimension, load_encoder
 from utils.utils import *
-from utils.streaming_utils import load_streaming_embeddings, process_batch
+from utils.streaming_utils import load_streaming_embeddings, process_batch, distribution_split
 from utils.train_utils import rec_loss_fn, trans_loss_fn, vsp_loss_fn, get_grad_norm
 from utils.wandb_logger import Logger
 from mini.topology import compute_cca, compute_svcca, compute_pwcca, compute_wasserstein_distance
@@ -48,17 +48,12 @@ def training_loop_(
 
     # Load linear weights if available
     linear_weights = {}
-    # Check for sup -> unsup
-    path_sup_to_unsup = os.path.join('weights', cfg.dataset, f"{cfg.sup_emb}_to_{cfg.unsup_emb}.pt")
-    if os.path.exists(path_sup_to_unsup):
-        print(f"Loading linear weights from {path_sup_to_unsup} for {cfg.sup_emb}")
-        linear_weights[cfg.sup_emb] = torch.load(path_sup_to_unsup).to(device)
-        
-    # Check for unsup -> sup
-    path_unsup_to_sup = os.path.join('weights', cfg.dataset, f"{cfg.unsup_emb}_to_{cfg.sup_emb}.pt")
-    if os.path.exists(path_unsup_to_sup):
-        print(f"Loading linear weights from {path_unsup_to_sup} for {cfg.unsup_emb}")
-        linear_weights[cfg.unsup_emb] = torch.load(path_unsup_to_sup).to(device)
+    if hasattr(cfg, 'apply_linear') and cfg.apply_linear:
+        # Check for sup -> unsup
+        path_sup_to_unsup = os.path.join('weights', cfg.dataset, f"{cfg.sup_emb}_to_{cfg.unsup_emb}.pt")
+        if os.path.exists(path_sup_to_unsup):
+            print(f"Loading linear weights from {path_sup_to_unsup} for {cfg.sup_emb}")
+            linear_weights[cfg.sup_emb] = torch.load(path_sup_to_unsup).to(device)
 
     translator.train()
     for i, batches in enumerate(dataloader_pbar):
@@ -319,22 +314,57 @@ def main():
 
     num_workers = min(get_num_proc(), 8)
     if cfg.dataset != 'mimic':
-        dset = load_streaming_embeddings(cfg.dataset)
-        print(f"Using {num_workers} workers and {len(dset)} datapoints")
+        # Check if using distribution split (two datasets with mixing ratios)
+        use_distribution_split = hasattr(cfg, 'dataset2') and cfg.dataset2 is not None
+        use_streaming = getattr(cfg, 'streaming', False)
+        
+        if use_distribution_split:
+            # Load both datasets (streaming or not based on config)
+            dset1 = load_streaming_embeddings(cfg.dataset, streaming=use_streaming)
+            dset2 = load_streaming_embeddings(cfg.dataset2, streaming=use_streaming)
+            
+            # Get distribution split parameters from config (with defaults)
+            source1_ratio_sup = getattr(cfg, 'source1_ratio_sup', 1.0)
+            source1_ratio_unsup = getattr(cfg, 'source1_ratio_unsup', 0.0)
+            num_sup = getattr(cfg, 'num_points', getattr(cfg, 'unsup_points', 10000))
+            num_unsup = getattr(cfg, 'unsup_points', getattr(cfg, 'num_points', 10000))
+            
+            print(f"Using distribution split (streaming={use_streaming}):")
+            print(f"  Supervised ratio from dataset1: {source1_ratio_sup}")
+            print(f"  Unsupervised ratio from dataset1: {source1_ratio_unsup}")
+            
+            supset, unsupset, valset = distribution_split(
+                dataset1=dset1,
+                dataset2=dset2,
+                num_sup_samples=num_sup,
+                num_unsup_samples=num_unsup,
+                num_val_samples=cfg.val_size,
+                source1_ratio_sup=source1_ratio_sup,
+                source1_ratio_unsup=source1_ratio_unsup,
+                train_seed=cfg.train_dataset_seed,
+                val_seed=cfg.val_dataset_seed,
+            )
+            
+            # Streaming functions now return materialized Dataset objects
+            print(f"Dataset sizes: supset={len(supset)}, unsupset={len(unsupset)}, valset={len(valset)}")
+        else:
+            # Original single dataset logic
+            dset = load_streaming_embeddings(cfg.dataset)
+            print(f"Using {num_workers} workers and {len(dset)} datapoints")
 
-        dset_dict = dset.train_test_split(test_size=cfg.val_size, seed=cfg.val_dataset_seed)
-        dset = dset_dict["train"]
-        valset = dset_dict["test"]
+            dset_dict = dset.train_test_split(test_size=cfg.val_size, seed=cfg.val_dataset_seed)
+            dset = dset_dict["train"]
+            valset = dset_dict["test"]
 
-        assert hasattr(cfg, 'num_points') or hasattr(cfg, 'unsup_points')
-        dset = dset.shuffle(seed=cfg.train_dataset_seed)
-        if hasattr(cfg, 'num_points'):
-            assert cfg.num_points > 0 and cfg.num_points <= len(dset) // 2
-            supset = dset.select(range(cfg.num_points))
-            unsupset = dset.select(range(cfg.num_points, cfg.num_points * 2))
-        elif hasattr(cfg, 'unsup_points'):
-            unsupset = dset.select(range(min(cfg.unsup_points, len(dset))))
-            supset = dset.select(range(min(cfg.unsup_points, len(dset)), len(dset) - len(unsupset)))
+            assert hasattr(cfg, 'num_points') or hasattr(cfg, 'unsup_points')
+            dset = dset.shuffle(seed=cfg.train_dataset_seed)
+            if hasattr(cfg, 'num_points'):
+                assert cfg.num_points > 0 and cfg.num_points <= len(dset) // 2
+                supset = dset.select(range(cfg.num_points))
+                unsupset = dset.select(range(cfg.num_points, cfg.num_points * 2))
+            elif hasattr(cfg, 'unsup_points'):
+                unsupset = dset.select(range(min(cfg.unsup_points, len(dset))))
+                supset = dset.select(range(min(cfg.unsup_points, len(dset)), len(dset) - len(unsupset)))
         
         # Set format to "python" to avoid NumPy 2.0 compatibility issues with datasets library
         supset.set_format("python")
