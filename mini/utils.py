@@ -47,8 +47,13 @@ def _split_two_datasets(
     assert 0.0 <= source1_ratio <= 1.0, "source1_ratio must be between 0 and 1"
     
     # Calculate samples from each source for training
-    num_train_from_source1 = int(num_train_samples * source1_ratio)
-    num_train_from_source2 = num_train_samples - num_train_from_source1
+    # For X: use source1_ratio
+    num_train_x_source1 = int(num_train_samples * source1_ratio)
+    num_train_x_source2 = num_train_samples - num_train_x_source1
+    
+    # For Y: use inverse ratio (1 - source1_ratio)
+    num_train_y_source1 = int(num_train_samples * (1 - source1_ratio))
+    num_train_y_source2 = num_train_samples - num_train_y_source1
     
     # Test set is always 50/50
     num_test_from_source1 = num_test_samples // 2
@@ -69,18 +74,20 @@ def _split_two_datasets(
     remaining_x2 = embeddings_x2[num_test_from_source2:]
     remaining_y2 = embeddings_y2[num_test_from_source2:]
     
-    assert num_train_from_source1 <= len(remaining_x1), f"Not enough samples in source 1 for training (need {num_train_from_source1}, have {len(remaining_x1)})"
-    assert num_train_from_source2 <= len(remaining_x2), f"Not enough samples in source 2 for training (need {num_train_from_source2}, have {len(remaining_x2)})"
+    assert num_train_x_source1 <= len(remaining_x1), f"Not enough samples in source 1 for training X (need {num_train_x_source1}, have {len(remaining_x1)})"
+    assert num_train_y_source1 <= len(remaining_y1), f"Not enough samples in source 1 for training Y (need {num_train_y_source1}, have {len(remaining_y1)})"
+    assert num_train_x_source2 <= len(remaining_x2), f"Not enough samples in source 2 for training X (need {num_train_x_source2}, have {len(remaining_x2)})"
+    assert num_train_y_source2 <= len(remaining_y2), f"Not enough samples in source 2 for training Y (need {num_train_y_source2}, have {len(remaining_y2)})"
     
     # Sample from source 1 (independently for X and Y)
-    indices_x1 = torch.randperm(len(remaining_x1))[:num_train_from_source1]
-    indices_y1 = torch.randperm(len(remaining_y1))[:num_train_from_source1]
+    indices_x1 = torch.randperm(len(remaining_x1))[:num_train_x_source1]
+    indices_y1 = torch.randperm(len(remaining_y1))[:num_train_y_source1]
     X_train_s1 = remaining_x1[indices_x1]
     Y_train_s1 = remaining_y1[indices_y1]
     
     # Sample from source 2 (independently for X and Y)
-    indices_x2 = torch.randperm(len(remaining_x2))[:num_train_from_source2]
-    indices_y2 = torch.randperm(len(remaining_y2))[:num_train_from_source2]
+    indices_x2 = torch.randperm(len(remaining_x2))[:num_train_x_source2]
+    indices_y2 = torch.randperm(len(remaining_y2))[:num_train_y_source2]
     X_train_s2 = remaining_x2[indices_x2]
     Y_train_s2 = remaining_y2[indices_y2]
     
