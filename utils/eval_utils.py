@@ -210,6 +210,47 @@ def get_avg_rank(sims: np.ndarray) -> float:
     return amax.mean() + 1, amax.var()
 
 
+def compute_hubness(sims: np.ndarray) -> dict:
+    """
+    Compute hubness statistics for a similarity matrix.
+    Hubness measures how evenly distributed nearest neighbor relationships are.
+    High hubness indicates some points are hubs (nearest neighbors to many points).
+    
+    Args:
+        sims: Similarity matrix of shape (n_target, n_translated) where sims[i, j] 
+              is the similarity between target point i and translated point j.
+    
+    Returns:
+        Dictionary with hubness statistics.
+    """
+    # For each target point (row), find which translated point (column) is most similar
+    nearest_neighbors = sims.argmax(axis=1)
+    
+    # Count how many times each translated point is a top-1 nearest neighbor
+    n_translated = sims.shape[1]
+    neighbor_counts = np.bincount(nearest_neighbors, minlength=n_translated)
+    
+    # Count orphans (points with no nearest neighbors)
+    orphans = int((neighbor_counts == 0).sum())
+    
+    # Compute skewness of the distribution
+    mean = neighbor_counts.mean()
+    std = neighbor_counts.std()
+    if std > 0:
+        skewness = float(((neighbor_counts - mean) ** 3).mean() / (std ** 3))
+    else:
+        skewness = 0.0
+    
+    # Compute statistics
+    return {
+        'hubness_orphans': orphans,
+        'hubness_std': float(std),
+        'hubness_max': int(neighbor_counts.max()),
+        'hubness_min': int(neighbor_counts.min()),
+        'hubness_skew': skewness,
+    }
+
+
 def create_heatmap(translator, ins, tgt_emb, src_emb, top_k_size, heatmap_size=None, k=16) -> dict:
     res = {}
     ins = {k: v[:top_k_size] for k, v in ins.items()}
@@ -223,6 +264,11 @@ def create_heatmap(translator, ins, tgt_emb, src_emb, top_k_size, heatmap_size=N
     avg_rank, rank_var = get_avg_rank(sims)
     res[f"{src_emb}_{tgt_emb}_rank"] = avg_rank
     res[f"{src_emb}_{tgt_emb}_rank_var"] = rank_var
+    
+    # Compute hubness statistics
+    hubness_stats = compute_hubness(sims)
+    for stat_name, stat_value in hubness_stats.items():
+        res[f"{src_emb}_{tgt_emb}_{stat_name}"] = stat_value
     
     if heatmap_size is not None:
         sims = sims[:heatmap_size, :heatmap_size]

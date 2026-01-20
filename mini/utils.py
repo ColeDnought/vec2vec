@@ -38,6 +38,8 @@ def _split_two_datasets(
     num_train_samples: int,
     num_test_samples: int,
     source1_ratio: float,
+    source1_ratio_y: float | None = None,
+    inverse_ratio: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Split two datasets into train/test sets with mixing.
@@ -51,8 +53,16 @@ def _split_two_datasets(
     num_train_x_source1 = int(num_train_samples * source1_ratio)
     num_train_x_source2 = num_train_samples - num_train_x_source1
     
-    # For Y: use inverse ratio (1 - source1_ratio)
-    num_train_y_source1 = int(num_train_samples * (1 - source1_ratio))
+    # For Y: use inverse ratio if flag is set, otherwise use explicit ratio
+    if inverse_ratio:
+        source1_ratio_y = 1.0 - source1_ratio
+        print(f"Using inverse ratio mode: Y ratio = 1.0 - {source1_ratio} = {source1_ratio_y}")
+    elif source1_ratio_y is None:
+        # Default behavior: use inverse (backward compatible)
+        source1_ratio_y = 1.0 - source1_ratio
+    
+    assert 0.0 <= source1_ratio_y <= 1.0, "source1_ratio_y must be between 0 and 1"
+    num_train_y_source1 = int(num_train_samples * source1_ratio_y)
     num_train_y_source2 = num_train_samples - num_train_y_source1
     
     # Test set is always 50/50
@@ -116,6 +126,8 @@ def train_test_split(
     num_test_samples: int = 1000,
     normalize: bool = True,
     source1_ratio: float = 0.5,
+    source1_ratio_y: float | None = None,
+    inverse_ratio: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Splits embeddings from one or two data sources into training and testing sets.
@@ -125,7 +137,9 @@ def train_test_split(
         embeddings_x2, embeddings_y2: Second data source (optional, e.g., trec stella/e5)
         num_train_samples: Total number of samples for each training set
         num_test_samples: Total number of samples for evaluation (1:1 matched)
-        source1_ratio: Proportion of training data from source 1 (0.0 to 1.0), ignored if single dataset
+        source1_ratio: Proportion of training data from source 1 for X (0.0 to 1.0), ignored if single dataset
+        source1_ratio_y: Proportion of training data from source 1 for Y (0.0 to 1.0), defaults to inverse of source1_ratio
+        inverse_ratio: If True, automatically set source1_ratio_y = 1.0 - source1_ratio
     
     Returns:
         X_train, Y_train, X_test, Y_test
@@ -137,7 +151,8 @@ def train_test_split(
         splits = _split_two_datasets(
             embeddings_x1, embeddings_y1, 
             embeddings_x2, embeddings_y2,
-            num_train_samples, num_test_samples, source1_ratio
+            num_train_samples, num_test_samples, source1_ratio,
+            source1_ratio_y, inverse_ratio
         )
     if normalize:
         splits = tuple(torch.nn.functional.normalize(e, dim=1) for e in splits)

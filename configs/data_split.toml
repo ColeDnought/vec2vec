@@ -16,8 +16,9 @@ noise_level = 0.0
 [dataset]
 dataset = 'nq'
 dataset2 = 'fineweb-tiny'
-source1_ratio_sup = 0.8
-source1_ratio_unsup = 0.2
+source1_ratio_sup = 1.0
+source1_ratio_unsup = 0.0
+inverse_ratio = true
 streaming = true
 
 [translator]

@@ -23,7 +23,7 @@ from utils.utils import *
 from utils.streaming_utils import load_streaming_embeddings, process_batch, distribution_split
 from utils.train_utils import rec_loss_fn, trans_loss_fn, vsp_loss_fn, get_grad_norm
 from utils.wandb_logger import Logger
-from mini.topology import compute_cca, compute_svcca, compute_pwcca, compute_wasserstein_distance
+from mini.topology import compute_svcca, compute_wasserstein_distance
 
 from datasets import load_from_disk
 
@@ -325,7 +325,14 @@ def main():
             
             # Get distribution split parameters from config (with defaults)
             source1_ratio_sup = getattr(cfg, 'source1_ratio_sup', 1.0)
-            source1_ratio_unsup = getattr(cfg, 'source1_ratio_unsup', 0.0)
+            use_inverse_ratio = getattr(cfg, 'inverse_ratio', False)
+            
+            if use_inverse_ratio:
+                source1_ratio_unsup = 1.0 - source1_ratio_sup
+                print(f"Using inverse ratio mode: unsup ratio = 1.0 - {source1_ratio_sup} = {source1_ratio_unsup}")
+            else:
+                source1_ratio_unsup = getattr(cfg, 'source1_ratio_unsup', 0.0)
+            
             num_sup = getattr(cfg, 'num_points', getattr(cfg, 'unsup_points', 10000))
             num_unsup = getattr(cfg, 'unsup_points', getattr(cfg, 'num_points', 10000))
             
@@ -617,35 +624,23 @@ def main():
                     X_trans = topo_trans[cfg.unsup_emb][cfg.sup_emb].cpu()
                     Y_target = topo_ins[cfg.unsup_emb].cpu()
                     
-                    cca_corrs = compute_cca(X_trans, Y_target)
-                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_mean_cca"] = float(np.mean(cca_corrs))
-                    
                     svcca_corrs = compute_svcca(X_trans, Y_target)
                     val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_mean_svcca"] = float(np.mean(svcca_corrs))
                     
-                    pwcca = compute_pwcca(X_trans, Y_target)
-                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_pwcca"] = pwcca
-                    
-                    wasserstein_dist = compute_wasserstein_distance(X_trans, Y_target, dim=1, n_samples=1000)
-                    if wasserstein_dist is not None:
-                        val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_wasserstein_h1"] = wasserstein_dist
+                    wasserstein_mean, wasserstein_std = compute_wasserstein_distance(X_trans, Y_target, dim=1, n_samples=1000, n_bootstrap=5)
+                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_wasserstein_h1_mean"] = wasserstein_mean
+                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_wasserstein_h1_std"] = wasserstein_std
                     
                     # Compute metrics for unsup -> sup translation
                     X_trans_rev = topo_trans[cfg.sup_emb][cfg.unsup_emb].cpu()
                     Y_target_rev = topo_ins[cfg.sup_emb].cpu()
                     
-                    cca_corrs_rev = compute_cca(X_trans_rev, Y_target_rev)
-                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_mean_cca"] = float(np.mean(cca_corrs_rev))
-                    
                     svcca_corrs_rev = compute_svcca(X_trans_rev, Y_target_rev)
                     val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_mean_svcca"] = float(np.mean(svcca_corrs_rev))
                     
-                    pwcca_rev = compute_pwcca(X_trans_rev, Y_target_rev)
-                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_pwcca"] = pwcca_rev
-                    
-                    wasserstein_dist_rev = compute_wasserstein_distance(X_trans_rev, Y_target_rev, dim=1, n_samples=1000)
-                    if wasserstein_dist_rev is not None:
-                        val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_wasserstein_h1"] = wasserstein_dist_rev
+                    wasserstein_mean_rev, wasserstein_std_rev = compute_wasserstein_distance(X_trans_rev, Y_target_rev, dim=1, n_samples=1000, n_bootstrap=5)
+                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_wasserstein_h1_mean"] = wasserstein_mean_rev
+                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_wasserstein_h1_std"] = wasserstein_std_rev
                 except Exception as e:
                     print(f"Warning: Could not compute topological metrics: {e}")
                 
