@@ -1,0 +1,22 @@
+[general]
+seed = 42
+sampling_seed = 42
+dataset = "fineweb"
+# dataset2 = "fineweb"  # Optional second dataset, set to null or remove if not needed
+model1 = "e5"
+model2 = "gtr"
+source_1_ratio = 0.0  # Only used when dataset2 is specified
+inverse = false  # If true, uses 1.0 - source_1_ratio for source -> target embeddings
+
+[train]
+num_train = 128000
+num_test = 16000
+k = 50  # Number of neighbors for matching
+num_procrustes_iters = 200
+num_cluster_iters = 5
+num_clusters = 1024
+
+[logging]
+use_wandb = true
+wandb_project = "vec2vec-linear"
+wandb_name = "linear_mapping"
