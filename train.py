@@ -313,7 +313,22 @@ def main():
     )
 
     num_workers = min(get_num_proc(), 8)
-    if cfg.dataset != 'mimic':
+    if cfg.dataset == 'cycle':
+        # Load cycle dataset from disk
+        from datasets import load_from_disk
+        save_path = os.path.expanduser('~/.cache/huggingface/datasets/flat_cycle')
+        dataset = load_from_disk(save_path)
+        
+        # Split into train, validation sets
+        supset = dataset['train'].shuffle(cfg.train_dataset_seed).select(range(min(cfg.num_points, len(dataset['train']))))
+        unsupset = dataset['train'].shuffle(cfg.train_dataset_seed).select(range(min(cfg.num_points, len(dataset['train']))))
+        valset = dataset['validation'].shuffle(cfg.val_dataset_seed).select(range(min(cfg.val_size, len(dataset['validation']))))
+        
+        # Set format to "python" to avoid NumPy 2.0 compatibility issues
+        supset.set_format("python")
+        unsupset.set_format("python")
+        valset.set_format("python")
+    elif cfg.dataset != 'mimic':
         # Check if using distribution split (two datasets with mixing ratios)
         use_distribution_split = hasattr(cfg, 'dataset2') and cfg.dataset2 is not None
         use_streaming = getattr(cfg, 'streaming', False)
@@ -393,22 +408,47 @@ def main():
         valset.set_format("python")
         
 
-    supset = MultiencoderTokenizedDataset(
-        dataset=supset,
-        encoders=sup_encs,
-        n_embs_per_batch=cfg.n_embs_per_batch,
-        batch_size=cfg.bs,
-        max_length=cfg.max_seq_length,
-        seed=cfg.sampling_seed,
-    )
-    unsupset = MultiencoderTokenizedDataset(
-        dataset=unsupset,
-        encoders=unsup_enc,
-        n_embs_per_batch=1,
-        batch_size=cfg.bs,
-        max_length=cfg.max_seq_length,
-        seed=cfg.sampling_seed,
-    )
+    if cfg.dataset == 'cycle':
+        # Use CycleDataset for image-text pairs
+        from utils.collate import CycleDataset
+        
+        # Supervised: text only (GTE on reconstructions)
+        supset = CycleDataset(
+            dataset=supset,
+            text_encoders=sup_encs,  # GTE for text
+            image_encoders={},  # No image encoders
+            n_embs_per_batch=cfg.n_embs_per_batch,
+            batch_size=cfg.bs,
+            max_length=cfg.max_seq_length,
+            seed=cfg.sampling_seed,
+        )
+        # Unsupervised: images only (CLIP on generations)
+        unsupset = CycleDataset(
+            dataset=unsupset,
+            text_encoders={},  # No text encoders
+            image_encoders=unsup_enc,  # CLIP for images
+            n_embs_per_batch=1,
+            batch_size=cfg.bs,
+            max_length=cfg.max_seq_length,
+            seed=cfg.sampling_seed,
+        )
+    else:
+        supset = MultiencoderTokenizedDataset(
+            dataset=supset,
+            encoders=sup_encs,
+            n_embs_per_batch=cfg.n_embs_per_batch,
+            batch_size=cfg.bs,
+            max_length=cfg.max_seq_length,
+            seed=cfg.sampling_seed,
+        )
+        unsupset = MultiencoderTokenizedDataset(
+            dataset=unsupset,
+            encoders=unsup_enc,
+            n_embs_per_batch=1,
+            batch_size=cfg.bs,
+            max_length=cfg.max_seq_length,
+            seed=cfg.sampling_seed,
+        )
 
     sup_dataloader = DataLoader(
         supset,
@@ -432,14 +472,27 @@ def main():
     )
 
     if use_val_set:
-        valset = MultiencoderTokenizedDataset(
-            dataset=valset,
-            encoders={ **unsup_enc, **sup_encs },
-            n_embs_per_batch=2,
-            batch_size=cfg.val_bs,
-            max_length=cfg.max_seq_length,
-            seed=cfg.sampling_seed,
-        )
+        if cfg.dataset == 'cycle':
+            from utils.collate import CycleDataset
+            # Validation needs both encoders for evaluation
+            valset = CycleDataset(
+                dataset=valset,
+                text_encoders=sup_encs,
+                image_encoders=unsup_enc,
+                n_embs_per_batch=2,
+                batch_size=cfg.val_bs,
+                max_length=cfg.max_seq_length,
+                seed=cfg.sampling_seed,
+            )
+        else:
+            valset = MultiencoderTokenizedDataset(
+                dataset=valset,
+                encoders={ **unsup_enc, **sup_encs },
+                n_embs_per_batch=2,
+                batch_size=cfg.val_bs,
+                max_length=cfg.max_seq_length,
+                seed=cfg.sampling_seed,
+            )
         valloader = DataLoader(
             valset,
             batch_size=cfg.val_bs if hasattr(cfg, 'val_bs') else cfg.bs,

@@ -60,6 +60,15 @@ def load_encoder(model_flag, device: str = 'cpu', mixed_precision: Optional[str]
         encoder = SentenceTransformer(modules=[transformer, pooling, normalize])
     else:
         encoder = SentenceTransformer(f, device=device, trust_remote_code=True, model_kwargs=model_kwargs)
+    
+    # Add processor for CLIP models to handle images
+    if model_flag == 'clip' or 'clip' in model_flag.lower():
+        from transformers import CLIPProcessor
+        # Use the underlying CLIP model name from sentence-transformers
+        # sentence-transformers/clip-ViT-B-32 wraps openai/clip-vit-base-patch32
+        clip_base_model = 'openai/clip-vit-base-patch32'
+        encoder.processor = CLIPProcessor.from_pretrained(clip_base_model)
+    
     return encoder.eval()
 
 

@@ -81,6 +81,13 @@ def load_streaming_embeddings(
         dset = load_dataset("BeIR/trec-news-generated-queries", streaming=streaming, num_proc=num_proc, split="train").remove_columns(['_id', 'title', 'query'])
     elif dataset_name == "retrieval":
         dset = _load_retrieval_dataset()
+    elif dataset_name == "cycle":
+        from datasets import load_from_disk
+        import os
+        save_path = os.path.expanduser('~/.cache/huggingface/datasets/flat_cycle')
+        dset = load_from_disk(save_path)[split_flag]
+        # Dataset has 'generation' (PIL images) and 'reconstruction' (text)
+        return dset
     else:
         raise NotImplementedError()
 
@@ -147,7 +154,12 @@ def forward_embedding_sentence_transformers(enc, features, normalize_embeddings:
 
 def process_batch(batch, encoders, normalize_embeddings, device='cpu'):
     ins = {}    
+    # Find text embeddings (have input_ids)
     batch_embs = [k.replace("_input_ids", "") for k in batch.keys() if k.endswith("_input_ids")]
+    # Find image embeddings (have pixel_values)
+    batch_img_embs = [k.replace("_pixel_values", "") for k in batch.keys() if k.endswith("_pixel_values")]
+    
+    # Process text embeddings
     for emb in batch_embs:
         encoders[emb].to(device)
         emb_inputs = { k.replace(f"{emb}_", ""): v.to(device) for k, v in batch.items() if k.startswith(f"{emb}_") }
@@ -155,6 +167,16 @@ def process_batch(batch, encoders, normalize_embeddings, device='cpu'):
             encoders[emb], emb_inputs,
             normalize_embeddings=normalize_embeddings
         )
+    
+    # Process image embeddings (for CLIP)
+    for emb in batch_img_embs:
+        encoders[emb].to(device)
+        emb_inputs = { k.replace(f"{emb}_", ""): v.to(device) for k, v in batch.items() if k.startswith(f"{emb}_") }
+        ins[emb] = forward_embedding_sentence_transformers(
+            encoders[emb], emb_inputs,
+            normalize_embeddings=normalize_embeddings
+        )
+    
     return ins
 
 
