@@ -286,7 +286,9 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     assert hasattr(cfg, 'unsup_emb')
-    assert cfg.sup_emb != cfg.unsup_emb
+
+    # Allow clip to be both supervised and unsupervised, but other embeddings must be different
+    assert cfg.sup_emb != cfg.unsup_emb or cfg.sup_emb == 'clip'
 
     unsup_enc = {
         cfg.unsup_emb: load_encoder(cfg.unsup_emb, mixed_precision=cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None)
@@ -296,7 +298,7 @@ def main():
     }
     translator.add_encoders(unsup_dim, overwrite_embs=[cfg.unsup_emb])
 
-    assert cfg.unsup_emb not in sup_encs
+    assert cfg.unsup_emb not in sup_encs or (cfg.sup_emb == cfg.unsup_emb and cfg.sup_emb == 'clip')
     assert cfg.unsup_emb in translator.in_adapters
     assert cfg.unsup_emb in translator.out_adapters
 

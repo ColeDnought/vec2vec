@@ -18,6 +18,8 @@ HF_FLAGS = {
     'snowflake': 'Snowflake/snowflake-arctic-embed-m-long',
     'sbert': 'sentence-transformers/all-MiniLM-L12-v2',
     'clip': 'sentence-transformers/clip-ViT-B-32',
+    'clip_text': 'sentence-transformers/clip-ViT-B-32',
+    'clip_image': 'sentence-transformers/clip-ViT-B-32',
     'jina': 'jinaai/jina-embeddings-v2-base-en',
     'bert-nli': 'sentence-transformers/bert-base-nli-mean-tokens',
     'dpr': 'sentence-transformers/facebook-dpr-ctx_encoder-single-nq-base',

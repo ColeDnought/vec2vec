@@ -12,6 +12,13 @@ import torch
 from utils.tokenization import get_tokenizer_max_length
 
 
+def _unwrap_text_tokenizer(tok):
+    # SentenceTransformers CLIP uses a processor; unwrap to the underlying tokenizer.
+    if hasattr(tok, "tokenizer") and not hasattr(tok, "model_max_length"):
+        return tok.tokenizer
+    return tok
+
+
 class TokenizedCollator:
     # TODO: Fix to use separate tokenizers
 
@@ -54,7 +61,7 @@ class MultiencoderTokenizedDataset(torch.utils.data.Dataset):
             seed: int = 42,
         ):
         self.tokenizers = {
-            enc_name: enc.tokenizer for enc_name, enc in encoders.items()
+            enc_name: _unwrap_text_tokenizer(enc.tokenizer) for enc_name, enc in encoders.items()
         }
         self.tokenizer_names = list(sorted(self.tokenizers.keys()))
         self.n_embs_per_batch = n_embs_per_batch
@@ -100,7 +107,7 @@ class MultiencoderTokenizedDataset(torch.utils.data.Dataset):
                 max_length=max_length,
                 return_tensors="pt",
             )
-            if tok_name == 'clip':
+            if 'clip' in tok_name:
                 tt["image_text_info"] = torch.tensor(1)
 
             output.update({f"{tok_name}_{key}": value for key, value in tt.items()})
@@ -146,7 +153,7 @@ class CycleDataset(torch.utils.data.Dataset):
             seed: int = 42,
         ):
         self.text_tokenizers = {
-            enc_name: enc.tokenizer for enc_name, enc in text_encoders.items()
+            enc_name: _unwrap_text_tokenizer(enc.tokenizer) for enc_name, enc in text_encoders.items()
         }
         self.image_processors = {
             enc_name: enc.processor if hasattr(enc, 'processor') else None 
@@ -194,6 +201,8 @@ class CycleDataset(torch.utils.data.Dataset):
                 return_tensors="pt",
             )
             output.update({f"{tok_name}_{key}": value.flatten() for key, value in tt.items()})
+            if 'clip' in tok_name:
+                output[f"{tok_name}_image_text_info"] = torch.tensor(1)
         
         # Process image with image encoders (e.g., CLIP)
         for img_name in self.image_encoder_names:
