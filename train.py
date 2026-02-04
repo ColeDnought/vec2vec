@@ -703,14 +703,21 @@ def main():
                 translator.train()
 
             if epoch >= cfg.min_epochs and early_stopping:
-                score = np.mean([v for k, v in val_res.items() if 'top_rank' in k])
+                rank_vals = [
+                    v for k, v in val_res.items()
+                    if ("_rank" in k or "_avg_rank" in k) and "rank_var" not in k
+                ]
+                if len(rank_vals) == 0:
+                    print("Warning: No rank metrics found for early stopping; skipping this epoch.")
+                else:
+                    score = float(np.mean(rank_vals))
 
-                if early_stopper.early_stop(score):
-                    print("Early stopping...")
-                    break
-                if early_stopper.counter == 0 and score < early_stopper.opt_val:
-                    print(f"Saving model (counter = {early_stopper.counter})... {score} < {early_stopper.opt_val} is the best score so far...")
-                    save_everything(cfg, translator, opt, [gan, sup_gan, latent_gan, similarity_gan], save_dir)
+                    if early_stopper.early_stop(score):
+                        print("Early stopping...")
+                        break
+                    if early_stopper.counter == 0 and score < early_stopper.opt_val:
+                        print(f"Saving model (counter = {early_stopper.counter})... {score} < {early_stopper.opt_val} is the best score so far...")
+                        save_everything(cfg, translator, opt, [gan, sup_gan, latent_gan, similarity_gan], save_dir)
 
         max_num_batches = None
         print(f"Epoch", epoch, "max_num_batches", max_num_batches, "max_num_epochs", max_num_epochs)
