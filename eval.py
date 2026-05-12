@@ -42,7 +42,8 @@ def main():
 
     dset = load_streaming_embeddings(cfg.dataset)
 
-    sup_encs = {cfg.sup_emb: load_encoder(cfg.sup_emb, mixed_precision=cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None)}
+    _mp = cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None
+    sup_encs = {cfg.sup_emb: load_encoder(cfg.sup_emb, device=str(accelerator.device), mixed_precision=_mp)}
     encoder_dims = {cfg.sup_emb: get_sentence_embedding_dimension(sup_encs[cfg.sup_emb])}
     translator = load_n_translator(cfg, encoder_dims)
 
@@ -50,7 +51,7 @@ def main():
     assert cfg.sup_emb != cfg.unsup_emb
 
     unsup_enc = {
-        cfg.unsup_emb: load_encoder(cfg.unsup_emb, mixed_precision=cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None)
+        cfg.unsup_emb: load_encoder(cfg.unsup_emb, device=str(accelerator.device), mixed_precision=_mp)
     }
     unsup_dim = {
         cfg.unsup_emb: get_sentence_embedding_dimension(unsup_enc[cfg.unsup_emb])
@@ -121,10 +122,11 @@ def main():
                 inverters=inverters,
                 device=accelerator.device
             )
+        _RECON_KEYS = {'cos', 'mse', 'mse_var', 'hub_orig_skew', 'hub_rec_skew', 'hub_delta_skew'}
         val_res['recons'] = {}
         for flag, res in recons.items():
             for k, v in res.items():
-                if k == 'cos':
+                if k in _RECON_KEYS:
                     val_res['recons'][f"rec_{flag}_{k}"] = v
 
         val_res['trans'] = {}

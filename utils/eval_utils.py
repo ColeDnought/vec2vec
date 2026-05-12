@@ -93,7 +93,37 @@ def calculate_scores(score_flag, target_text, translation_text):
     return np.mean([score_func(p, r) for p, r in zip(target_text, translation_text)])
 
 
-def eval_batch(ins, recons, translations):
+def _skewness(arr: np.ndarray) -> float:
+    """Adjusted Fisher-Pearson skewness (no scipy dependency)."""
+    n = len(arr)
+    if n < 3:
+        return 0.0
+    std = arr.std()
+    if std == 0.0:
+        return 0.0
+    return float((n / ((n - 1) * (n - 2))) * np.sum(((arr - arr.mean()) / std) ** 3))
+
+
+def compute_hubness(vectors: torch.Tensor, k: int = 10) -> dict:
+    """
+    Hubness = skewness of the N_k distribution (how often each vector is a
+    k-NN of other vectors).  High positive skew → a few hub vectors dominate
+    retrieval, which can signal mode collapse or degenerate geometry.
+    """
+    n = vectors.shape[0]
+    k = min(k, n - 1)
+    normed = F.normalize(vectors.float(), p=2, dim=1)
+    sims = normed @ normed.T
+    sims.fill_diagonal_(float('-inf'))
+    _, knn_idx = sims.topk(k, dim=1)  # [n, k]
+    nk = torch.bincount(knn_idx.flatten(), minlength=n).float().cpu().numpy()
+    return {
+        'hub_skew': _skewness(nk),
+        'hub_std': float(nk.std()),
+    }
+
+
+def eval_batch(ins, recons, translations, hubness_k: int = 10):
     recon_res = {}
     translation_res = {}
     for target_flag, emb in ins.items():
@@ -102,25 +132,42 @@ def eval_batch(ins, recons, translations):
         rec = recons[target_flag]
         rec = rec / rec.norm(dim=1, keepdim=True)
         rec_distances = 1 - (rec @ rec.T)
+        per_sample_mse_rec = F.mse_loss(emb, rec, reduction='none').mean(dim=1)
+        orig_hub = compute_hubness(emb, k=hubness_k)
+        rec_hub = compute_hubness(rec, k=hubness_k)
         recon_res[target_flag] = {
             "mse": F.mse_loss(emb, rec).item(),
+            "mse_var": per_sample_mse_rec.var().item(),
             "cos": F.cosine_similarity(emb, rec).mean().item(),
             "std": rec.std(dim=0).mean().item(),
             "vsp": (in_distances - rec_distances).abs().mean().item(),
             "cos_var": F.cosine_similarity(emb, rec).var().item(),
-            "vsp_var": (in_distances - rec_distances).abs().var().item()
+            "vsp_var": (in_distances - rec_distances).abs().var().item(),
+            "hub_orig_skew": orig_hub['hub_skew'],
+            "hub_orig_std": orig_hub['hub_std'],
+            "hub_rec_skew": rec_hub['hub_skew'],
+            "hub_rec_std": rec_hub['hub_std'],
+            "hub_delta_skew": rec_hub['hub_skew'] - orig_hub['hub_skew'],
         }
         translation_res[target_flag] = {}
         for flag, trans in translations[target_flag].items():
             trans = trans / trans.norm(dim=1, keepdim=True)
             out_distances = 1 - (trans @ trans.T)
+            per_sample_mse_trans = F.mse_loss(emb, trans, reduction='none').mean(dim=1)
+            trans_hub = compute_hubness(trans, k=hubness_k)
             translation_res[target_flag][flag] = {
                 "mse": F.mse_loss(emb, trans).item(),
+                "mse_var": per_sample_mse_trans.var().item(),
                 "cos": F.cosine_similarity(emb, trans).mean().item(),
                 "std": trans.std(dim=0).mean().item(),
                 "vsp": (in_distances - out_distances).abs().mean().item(),
                 "cos_var": F.cosine_similarity(emb, trans).var().item(),
-                "vsp_var": (in_distances - out_distances).abs().var().item()
+                "vsp_var": (in_distances - out_distances).abs().var().item(),
+                "hub_orig_skew": orig_hub['hub_skew'],
+                "hub_orig_std": orig_hub['hub_std'],
+                "hub_trans_skew": trans_hub['hub_skew'],
+                "hub_trans_std": trans_hub['hub_std'],
+                "hub_delta_skew": trans_hub['hub_skew'] - orig_hub['hub_skew'],
             }
     return recon_res, translation_res
 

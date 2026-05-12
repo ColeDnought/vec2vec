@@ -115,7 +115,7 @@ def get_world_size() -> int:
         return 1
 
 def get_num_proc() -> int:
-    world_size: int = torch.cuda.device_count()
+    world_size: int = max(torch.cuda.device_count(), 1)
     try:
         # os.sched_getaffinity respects schedulers, unlike cpu_count(), but it's only available
         # on some Unix platforms, so we support both!

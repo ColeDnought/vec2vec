@@ -277,8 +277,9 @@ def main():
     print("Running Experiment:", cfg.wandb_name)
 
 
+    _mp = cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None
     sup_encs = {
-        cfg.sup_emb: load_encoder(cfg.sup_emb, mixed_precision=cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None)
+        cfg.sup_emb: load_encoder(cfg.sup_emb, device=str(accelerator.device), mixed_precision=_mp)
     }
     encoder_dims = {
         cfg.sup_emb: get_sentence_embedding_dimension(sup_encs[cfg.sup_emb])
@@ -294,7 +295,7 @@ def main():
     assert cfg.sup_emb != cfg.unsup_emb
 
     unsup_enc = {
-        cfg.unsup_emb: load_encoder(cfg.unsup_emb, mixed_precision=cfg.mixed_precision if hasattr(cfg, 'mixed_precision') else None)
+        cfg.unsup_emb: load_encoder(cfg.unsup_emb, device=str(accelerator.device), mixed_precision=_mp)
     }
     unsup_dim = {
         cfg.unsup_emb: get_sentence_embedding_dimension(unsup_enc[cfg.unsup_emb])
@@ -379,7 +380,7 @@ def main():
         num_workers=num_workers // 2,
         shuffle=True,
         pin_memory=True,
-        prefetch_factor=None,
+        prefetch_factor=(4 if num_workers // 2 > 0 else None),
         collate_fn=TokenizedCollator(),
         drop_last=True,
     )
@@ -389,7 +390,7 @@ def main():
         num_workers=num_workers // 2,
         shuffle=True,
         pin_memory=True,
-        prefetch_factor=None,
+        prefetch_factor=(4 if num_workers // 2 > 0 else None),
         collate_fn=TokenizedCollator(),
         drop_last=True,
     )
