@@ -232,6 +232,9 @@ def training_loop_(
     with open(save_dir + 'config.toml', 'w') as f:
         toml.dump(cfg.__dict__, f)
     torch.save(accelerator.unwrap_model(translator).state_dict(), model_save_dir)
+    for i, g in enumerate([gan, sup_gan, latent_gan, similarity_gan]):
+        torch.save(accelerator.unwrap_model(g.discriminator).state_dict(), os.path.join(save_dir, f'gan_{i}.pt'))
+        torch.save(g.discriminator_opt.state_dict(), os.path.join(save_dir, f'gan_opt_{i}.pt'))
     return sup_iter
 
 
