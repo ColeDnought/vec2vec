@@ -23,7 +23,7 @@ from utils.utils import *
 from utils.streaming_utils import load_streaming_embeddings, process_batch
 from utils.train_utils import rec_loss_fn, trans_loss_fn, vsp_loss_fn, get_grad_norm
 from utils.wandb_logger import Logger
-from mini.topology import compute_cca, compute_svcca, compute_pwcca, compute_wasserstein_distance
+from mini.topology import compute_cca, compute_svcca, compute_wasserstein_distance
 
 from datasets import load_from_disk
 
@@ -594,9 +594,6 @@ def main():
                     svcca_corrs = compute_svcca(X_trans, Y_target)
                     val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_mean_svcca"] = float(np.mean(svcca_corrs))
                     
-                    pwcca = compute_pwcca(X_trans, Y_target)
-                    val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_pwcca"] = pwcca
-                    
                     wasserstein_dist = compute_wasserstein_distance(X_trans, Y_target, dim=1, n_samples=1000)
                     if wasserstein_dist is not None:
                         val_res[f"val/topo_{cfg.sup_emb}_to_{cfg.unsup_emb}_wasserstein_h1"] = wasserstein_dist
@@ -610,9 +607,6 @@ def main():
                     
                     svcca_corrs_rev = compute_svcca(X_trans_rev, Y_target_rev)
                     val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_mean_svcca"] = float(np.mean(svcca_corrs_rev))
-                    
-                    pwcca_rev = compute_pwcca(X_trans_rev, Y_target_rev)
-                    val_res[f"val/topo_{cfg.unsup_emb}_to_{cfg.sup_emb}_pwcca"] = pwcca_rev
                     
                     wasserstein_dist_rev = compute_wasserstein_distance(X_trans_rev, Y_target_rev, dim=1, n_samples=1000)
                     if wasserstein_dist_rev is not None:

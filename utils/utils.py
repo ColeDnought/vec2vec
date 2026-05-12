@@ -92,19 +92,30 @@ def get_inverters(emb_flags, device='cpu'):
 
 def read_args(argv):
     cfg = {}
-    # Handle unknown arguments
-    for arg in argv:
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
         if arg.startswith("--"):
             key = arg.lstrip("--")
-            # Attempt to parse value as int, float, or leave as string
-            try:
-                value = int(argv[argv.index(arg) + 1])
-            except ValueError:
-                try:
-                    value = float(argv[argv.index(arg) + 1])
-                except ValueError:
-                    value = argv[argv.index(arg) + 1]
-            cfg[key] = value
+            if i + 1 < len(argv) and not argv[i+1].startswith("--"):
+                val_str = argv[i+1]
+                if val_str.lower() == 'true':
+                    value = True
+                elif val_str.lower() == 'false':
+                    value = False
+                else:
+                    try:
+                        value = int(val_str)
+                    except ValueError:
+                        try:
+                            value = float(val_str)
+                        except ValueError:
+                            value = val_str
+                cfg[key] = value
+                i += 1
+            else:
+                cfg[key] = True
+        i += 1
     return cfg
 
 

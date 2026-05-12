@@ -104,7 +104,7 @@ def _skewness(arr: np.ndarray) -> float:
     return float((n / ((n - 1) * (n - 2))) * np.sum(((arr - arr.mean()) / std) ** 3))
 
 
-def compute_hubness(vectors: torch.Tensor, k: int = 10) -> dict:
+def _compute_hubness(vectors: torch.Tensor, k: int = 10) -> dict:
     """
     Hubness = skewness of the N_k distribution (how often each vector is a
     k-NN of other vectors).  High positive skew → a few hub vectors dominate
@@ -123,7 +123,11 @@ def compute_hubness(vectors: torch.Tensor, k: int = 10) -> dict:
     }
 
 
-def eval_batch(ins, recons, translations, hubness_k: int = 10):
+def compute_hubness(vectors: torch.Tensor, k: int = 10) -> dict:
+    return _compute_hubness(vectors, k=k)
+
+
+def eval_batch(ins, recons, translations, compute_hubness: bool = False, hubness_k: int = 10):
     recon_res = {}
     translation_res = {}
     for target_flag, emb in ins.items():
@@ -133,8 +137,6 @@ def eval_batch(ins, recons, translations, hubness_k: int = 10):
         rec = rec / rec.norm(dim=1, keepdim=True)
         rec_distances = 1 - (rec @ rec.T)
         per_sample_mse_rec = F.mse_loss(emb, rec, reduction='none').mean(dim=1)
-        orig_hub = compute_hubness(emb, k=hubness_k)
-        rec_hub = compute_hubness(rec, k=hubness_k)
         recon_res[target_flag] = {
             "mse": F.mse_loss(emb, rec).item(),
             "mse_var": per_sample_mse_rec.var().item(),
@@ -143,18 +145,22 @@ def eval_batch(ins, recons, translations, hubness_k: int = 10):
             "vsp": (in_distances - rec_distances).abs().mean().item(),
             "cos_var": F.cosine_similarity(emb, rec).var().item(),
             "vsp_var": (in_distances - rec_distances).abs().var().item(),
-            "hub_orig_skew": orig_hub['hub_skew'],
-            "hub_orig_std": orig_hub['hub_std'],
-            "hub_rec_skew": rec_hub['hub_skew'],
-            "hub_rec_std": rec_hub['hub_std'],
-            "hub_delta_skew": rec_hub['hub_skew'] - orig_hub['hub_skew'],
         }
+        if compute_hubness:
+            orig_hub = _compute_hubness(emb, k=hubness_k)
+            rec_hub = _compute_hubness(rec, k=hubness_k)
+            recon_res[target_flag].update({
+                "hub_orig_skew": orig_hub['hub_skew'],
+                "hub_orig_std": orig_hub['hub_std'],
+                "hub_rec_skew": rec_hub['hub_skew'],
+                "hub_rec_std": rec_hub['hub_std'],
+                "hub_delta_skew": rec_hub['hub_skew'] - orig_hub['hub_skew'],
+            })
         translation_res[target_flag] = {}
         for flag, trans in translations[target_flag].items():
             trans = trans / trans.norm(dim=1, keepdim=True)
             out_distances = 1 - (trans @ trans.T)
             per_sample_mse_trans = F.mse_loss(emb, trans, reduction='none').mean(dim=1)
-            trans_hub = compute_hubness(trans, k=hubness_k)
             translation_res[target_flag][flag] = {
                 "mse": F.mse_loss(emb, trans).item(),
                 "mse_var": per_sample_mse_trans.var().item(),
@@ -163,12 +169,16 @@ def eval_batch(ins, recons, translations, hubness_k: int = 10):
                 "vsp": (in_distances - out_distances).abs().mean().item(),
                 "cos_var": F.cosine_similarity(emb, trans).var().item(),
                 "vsp_var": (in_distances - out_distances).abs().var().item(),
-                "hub_orig_skew": orig_hub['hub_skew'],
-                "hub_orig_std": orig_hub['hub_std'],
-                "hub_trans_skew": trans_hub['hub_skew'],
-                "hub_trans_std": trans_hub['hub_std'],
-                "hub_delta_skew": trans_hub['hub_skew'] - orig_hub['hub_skew'],
             }
+            if compute_hubness:
+                trans_hub = _compute_hubness(trans, k=hubness_k)
+                translation_res[target_flag][flag].update({
+                    "hub_orig_skew": orig_hub['hub_skew'],
+                    "hub_orig_std": orig_hub['hub_std'],
+                    "hub_trans_skew": trans_hub['hub_skew'],
+                    "hub_trans_std": trans_hub['hub_std'],
+                    "hub_delta_skew": trans_hub['hub_skew'] - orig_hub['hub_skew'],
+                })
     return recon_res, translation_res
 
 
@@ -392,12 +402,13 @@ def eval_loop_(
 
     top_k_batches = cfg.top_k_batches if hasattr(cfg, 'top_k_batches') else 0
     text_batches = cfg.text_batches if hasattr(cfg, 'text_batches') else 0
+    compute_hubness = getattr(cfg, "compute_hubness", False)
     with torch.no_grad():
         for i, batch in enumerate(data_iter):
             ins = process_batch(batch, encoders, cfg.normalize_embeddings, device)
             recons, translations = translator(ins, include_reps=False)
             
-            r_res, t_res = eval_batch(ins, recons, translations)
+            r_res, t_res = eval_batch(ins, recons, translations, compute_hubness=compute_hubness)
             merge_dicts(recon_res, r_res)
             merge_dicts(translation_res, t_res)
             if i < top_k_batches and hasattr(cfg, 'top_k_size') and hasattr(cfg, 'k') and cfg.top_k_size > 0:
